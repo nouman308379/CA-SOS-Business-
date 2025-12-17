@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, FormEvent, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { useToast } from '@/components/ui/toast';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,7 @@ export function SearchBar({ initialQuery = '' }: SearchBarProps) {
   const [query, setQuery] = useState(initialQuery);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const pathname = usePathname();
   const { toast } = useToast();
 
   // Update query when initialQuery changes (e.g., from URL params)
@@ -26,6 +27,8 @@ export function SearchBar({ initialQuery = '' }: SearchBarProps) {
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    e.stopPropagation();
+    console.log('Form submitted, query:', query);
     const trimmedQuery = query.trim();
     if (!trimmedQuery) {
       toast('Please enter a business name to search', 'error');
@@ -33,8 +36,44 @@ export function SearchBar({ initialQuery = '' }: SearchBarProps) {
     }
 
     setIsLoading(true);
-    // Reset to page 1 when performing a new search
-    router.push(`/search?q=${encodeURIComponent(trimmedQuery)}&page=1`);
+    const searchUrl = `/search?q=${encodeURIComponent(trimmedQuery)}&page=1`;
+    console.log('Navigating to:', searchUrl);
+    
+    // Always use replace when on search page to ensure URL updates
+    // This ensures the useEffect in search page triggers even if query is the same
+    if (pathname === '/search') {
+      router.replace(searchUrl);
+      // Force a small delay to ensure state updates
+      setTimeout(() => {
+        setIsLoading(false);
+      }, 100);
+    } else {
+      router.push(searchUrl);
+    }
+  };
+
+  const handleButtonClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    console.log('Button clicked!', { query, isLoading, trimmed: query.trim() });
+    
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) {
+      console.log('Query is empty, showing toast');
+      toast('Please enter a business name to search', 'error');
+      return;
+    }
+
+    console.log('Proceeding with search:', trimmedQuery);
+    setIsLoading(true);
+    const searchUrl = `/search?q=${encodeURIComponent(trimmedQuery)}&page=1`;
+    
+    if (pathname === '/search') {
+      router.replace(searchUrl);
+      setTimeout(() => setIsLoading(false), 100);
+    } else {
+      router.push(searchUrl);
+    }
   };
 
   return (
@@ -62,7 +101,17 @@ export function SearchBar({ initialQuery = '' }: SearchBarProps) {
             type="text"
             placeholder="Enter your business name..."
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              console.log('Input changed:', e.target.value);
+              setQuery(e.target.value);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                console.log('Enter key pressed');
+                e.preventDefault();
+                handleSubmit(e as any);
+              }
+            }}
             className="pl-11 pr-4 h-12 sm:h-14 text-base sm:text-lg border-border rounded-xl transition-all shadow-md hover:shadow-lg bg-white/95 backdrop-blur-sm"
             style={{ 
               borderColor: '#a7f3d0',
@@ -80,41 +129,42 @@ export function SearchBar({ initialQuery = '' }: SearchBarProps) {
             disabled={isLoading}
           />
         </motion.div>
-        <motion.div
-          whileHover={{ scale: 1.05, y: -2 }}
-          whileTap={{ scale: 0.98 }}
-        >
-          <Button 
-            type="submit" 
-            disabled={isLoading || !query.trim()} 
-            className="h-12 sm:h-14 px-6 sm:px-8 text-base sm:text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 whitespace-nowrap border-0 disabled:opacity-50 disabled:cursor-not-allowed text-white"
-            style={{ 
-              background: 'linear-gradient(to right, #065F46, #047857)',
-            }}
-            onMouseEnter={(e) => {
+        <Button 
+          type="submit" 
+          onClick={handleButtonClick}
+          disabled={isLoading || !query.trim()} 
+          className="h-12 sm:h-14 px-6 sm:px-8 text-base sm:text-lg font-semibold rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 whitespace-nowrap border-0 disabled:opacity-50 disabled:cursor-not-allowed text-white relative z-50"
+          style={{ 
+            background: 'linear-gradient(to right, #065F46, #047857)',
+            cursor: (isLoading || !query.trim()) ? 'not-allowed' : 'pointer',
+          }}
+          onMouseEnter={(e) => {
+            if (!isLoading && query.trim()) {
               e.currentTarget.style.background = 'linear-gradient(to right, #047857, #065F46)';
-            }}
-            onMouseLeave={(e) => {
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!isLoading && query.trim()) {
               e.currentTarget.style.background = 'linear-gradient(to right, #065F46, #047857)';
-            }}
-          >
-            {isLoading ? (
-              <>
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Searching...
-              </>
-            ) : (
-              <>
-                <Search className="h-4 w-4 mr-1.5 sm:hidden" />
-                <span className="hidden sm:inline">Search</span>
-                <span className="sm:hidden">Go</span>
-              </>
-            )}
-          </Button>
-        </motion.div>
+            }
+          }}
+        >
+          {isLoading ? (
+            <>
+              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Searching...
+            </>
+          ) : (
+            <>
+              <Search className="h-4 w-4 mr-1.5 sm:hidden" />
+              <span className="hidden sm:inline">Search</span>
+              <span className="sm:hidden">Go</span>
+            </>
+          )}
+        </Button>
       </div>
     </motion.form>
   );
